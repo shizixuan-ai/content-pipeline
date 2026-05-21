@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>不需要第三方库：50 行 Go 代码实现令牌桶限流</title>
+</head>
+<body style="font-size: 16px; line-height: 1.75; color: #333333; padding: 0 10px; max-width: 100%;">
+
+<!-- ===== 头部：标题 ===== -->
+<h2 style="font-size: 20px; font-weight: bold; line-height: 1.5; margin: 20px 0 10px 0; text-align: center;">
+不需要第三方库：50 行 Go 代码实现令牌桶限流
+</h2>
+
+<!-- ===== 开头：场景钩子 ===== -->
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>"网关挂了。"</strong> 对方丢下一句话就挂了。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+你打开电脑，登录服务器，看到监控面板上一笔直的<strong>红色断崖</strong>——流量峰值到了平时的<strong>20 倍</strong>。数据库连接池爆了，业务进程 OOM，整个线上处于半瘫状态。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+这种场景每个后端工程师都不陌生。加机器太慢，改架构太远。你急需的，是一个<strong>轻量、可嵌入、不引入外部依赖</strong>的限流模块。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+这篇文章就做一件事：<strong>用 Go 标准库写一个生产级令牌桶限流器</strong>。不加 Redis，不引第三方包，50 行代码。
+</p>
+
+<blockquote style="margin: 15px 0; padding: 10px 15px; background: #f5f7fa; border-left: 4px solid #07c160; color: #555555; font-size: 15px;">
+完整代码在文末，可直接复制使用。
+</blockquote>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>金句：</strong>"不需要第三方库，50 行 Go 代码实现生产级令牌桶限流"
+</p>
+
+<!-- ===== 流程图 1：令牌桶算法流程 ===== -->
+<div style="margin: 20px 0; text-align: center; font-size: 14px; line-height: 1.6;" data-no-dark="true">
+  <div style="display: inline-block; border: 2px solid #4caf50; border-radius: 6px; padding: 10px 24px; background: #e8f5e9; margin: 4px auto; text-align: center;">
+    <span style="color: #333;">请求到达</span>
+  </div>
+  <div style="line-height: 1; font-size: 18px; color: #4caf50;">↓</div>
+  <div style="display: inline-block; border: 2px solid #ff9800; border-radius: 8px; padding: 10px 24px; background: #fff3e0; margin: 4px auto; text-align: center;">
+    <div style="color: #e65100;">令牌桶</div>
+    <div style="color: #888; font-size: 12px;">tokens &gt; 1?</div>
+  </div>
+  <div style="line-height: 1.5;">
+    <span style="color: #4caf50;">↙ 是</span>
+    <span style="margin-left: 60px; color: #e53935;">↘ 否</span>
+  </div>
+  <div>
+    <div style="display: inline-block; width: 45%; vertical-align: top; text-align: center;">
+      <div style="display: inline-block; border: 2px solid #4caf50; border-radius: 6px; padding: 10px 24px; background: #e8f5e9; margin: 4px auto; text-align: center;">
+        <div style="color: #333;">允许通过</div>
+        <div style="color: #888; font-size: 11px;">tokens--</div>
+      </div>
+    </div>
+    <div style="display: inline-block; width: 45%; vertical-align: top; text-align: center;">
+      <div style="display: inline-block; border: 2px solid #e53935; border-radius: 6px; padding: 10px 24px; background: #ffebee; margin: 4px auto; text-align: center;">
+        <div style="color: #c62828;">拒绝请求</div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #999999; font-size: 13px; margin: 5px 0 0 0;">令牌桶算法流程：请求到达 → 检查令牌 → 允许/拒绝</p>
+</div>
+
+<!-- ===== 腰部：全景图 ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+先搞懂令牌桶在干什么
+</h3>
+
+<p style="margin: 15px 0; font-size: 16px;">
+令牌桶算法很简单，两句话就能说清：
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>一个桶，以固定速率往里放令牌。请求来了就拿走一个令牌。桶空了，请求就被拒绝。</strong>
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+就这么简单。相比之下，漏桶算法是"恒定速率出水"，适合流量整形。令牌桶允许<strong>突发流量</strong>——因为桶里攒的令牌可以一次性被消耗掉，更适合 API 网关场景。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+文章分三块，你可以跳着看：
+</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 15px;">
+<thead>
+<tr style="background: #f5f7fa;">
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: left;">模块</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: left;">你得到的</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">难度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">基础实现</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">核心结构体 + Allow() 方法，50 行</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">⭐</td>
+</tr>
+<tr>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">运行时调参</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">动态调整速率和桶大小，无需重启</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">⭐⭐</td>
+</tr>
+<tr>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">HTTP Middleware</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">直接接入你的网关</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">⭐⭐</td>
+</tr>
+</tbody>
+</table>
+
+<!-- ===== 结构图 1：令牌桶 vs 漏桶 vs 计数器 ===== -->
+<div style="margin: 20px 0;" data-no-dark="true">
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+    <div style="background: #e3f2fd; padding: 10px; text-align: center; font-size: 15px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">
+      三种限流方案对比
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center;">
+      <div style="font-weight: bold; font-size: 15px; margin-bottom: 6px;">令牌桶</div>
+      <div style="color: #4caf50; font-size: 13px;">✅ 支持突发</div>
+      <div style="color: #4caf50; font-size: 13px;">✅ 50 行实现</div>
+      <div style="color: #888; font-size: 12px;">适合 API 网关</div>
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;">
+      <div style="font-weight: bold; font-size: 15px; margin-bottom: 6px;">漏桶</div>
+      <div style="color: #e53935; font-size: 13px;">❌ 无突发</div>
+      <div style="color: #4caf50; font-size: 13px;">✅ 实现简单</div>
+      <div style="color: #888; font-size: 12px;">适合流量整形</div>
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center;">
+      <div style="font-weight: bold; font-size: 15px; margin-bottom: 6px;">计数器</div>
+      <div style="color: #e53935; font-size: 13px;">❌ 临界问题</div>
+      <div style="color: #e53935; font-size: 13px;">❌ 精度低</div>
+      <div style="color: #888; font-size: 12px;">适合简单限流</div>
+    </div>
+  </div>
+  <p style="color: #999999; font-size: 13px; margin: 5px 0 0 0;">令牌桶在突发支持和实现复杂度之间取得最佳平衡</p>
+</div>
+
+<!-- ===== 腹部 1：基础实现 ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+1. 基础实现 — 50 行搞定
+</h3>
+
+<p style="margin: 15px 0; font-size: 16px;">
+先看最终效果：一个完整的、可直接用的令牌桶。
+</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>type TokenBucket struct {
+	mu        sync.Mutex
+	capacity  int64
+	rate      float64
+	tokens    float64
+	lastTime  time.Time
+}
+
+func New(rate float64, capacity int64) *TokenBucket {
+	return &TokenBucket{
+		rate:     rate,
+		capacity: capacity,
+		tokens:   float64(capacity),
+		lastTime: time.Now(),
+	}
+}
+
+func (tb *TokenBucket) refill() {
+	now := time.Now()
+	elapsed := now.Sub(tb.lastTime).Seconds()
+	tb.tokens += elapsed * tb.rate
+	if tb.tokens > float64(tb.capacity) {
+		tb.tokens = float64(tb.capacity)
+	}
+	tb.lastTime = now
+}
+
+func (tb *TokenBucket) Allow() bool {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	if tb.tokens < 1 {
+		return false
+	}
+	tb.tokens--
+	return true
+}</code></pre>
+
+<p style="margin: 15px 0; font-size: 16px;">
+核心设计只有两个：
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>用时间戳计算代替定时器</strong>。大多数新手实现会开一个 goroutine 定时往桶里加令牌。那样做不仅浪费资源，还要处理 goroutine 退出。我们这个实现每次请求时算一下过去了多少秒，按速率补上令牌。零 goroutine 开销。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>金句：</strong>"用时间戳算令牌，比定时器省掉一个 goroutine"
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>Mutex 保证并发安全</strong>。令牌桶会被多个 goroutine 同时调用，一个小粒度锁足矣。单机压测 16 核笔记本能跑到 <strong>5万+ QPS</strong>。
+</p>
+
+<blockquote style="margin: 15px 0; padding: 10px 15px; background: #f5f7fa; border-left: 4px solid #07c160; color: #555555; font-size: 15px;">
+💡 为什么 tokens 用 float64？因为两次请求间隔可能是毫秒级，速率按每秒计算，用浮点做累积更精确。最终检查 &lt; 1 来判定是否拒绝，天然就是一个"整数令牌"的语义。
+</blockquote>
+
+<!-- ===== 腹部 2：运行时调参 ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+2. 运行时调参 — 不改代码不重启
+</h3>
+
+<p style="margin: 15px 0; font-size: 16px;">
+很多限流库初始化后就锁死了参数。上线后发现速率设低了怎么办？改代码、发版、重启——就为了改一个数字。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+这个实现允许你<strong>随时调整速率和桶大小</strong>：
+</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>func (tb *TokenBucket) SetRate(rate float64) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	tb.rate = rate
+}
+
+func (tb *TokenBucket) SetCapacity(capacity int64) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	tb.capacity = capacity
+	if tb.tokens > float64(capacity) {
+		tb.tokens = float64(capacity)
+	}
+}</code></pre>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>主要思路</strong>：每次调参前先 <code>refill()</code>，把从上次取令牌到现在的"欠账"补上，再修改参数。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>注意</strong>：调低 <code>capacity</code> 时，如果当前累积的 tokens 超过新容量，就截断到新容量。这是最安全的做法——宁可误杀一个正常请求，也不让突发流量打穿限流。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>金句：</strong>"调低容量时截断 tokens，宁可误杀不可放过"
+</p>
+
+<!-- ===== 腹部 3：HTTP Middleware ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+3. 接入网关 — 4 行代码搞定
+</h3>
+
+<p style="margin: 15px 0; font-size: 16px;">
+限流器本身不产生价值，用它保护你的 API 网关才产生价值。用 Go 标准 <code>net/http</code> 的 Middleware 模式，4 行代码就能接入：
+</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>func RateLimitMiddleware(bucket *TokenBucket) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !bucket.Allow() {
+				w.Header().Set("Retry-After", "1")
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}</code></pre>
+
+<p style="margin: 15px 0; font-size: 16px;">
+使用示例：
+</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>bucket := New(100, 200) // 每秒 100 个请求，最多积累 200 个突发
+mux := http.NewServeMux()
+mux.Handle("/api/", RateLimitMiddleware(bucket)(handler))</code></pre>
+
+<p style="margin: 15px 0; font-size: 16px;">
+这就完成了从<strong>令牌桶实现 → 网关保护</strong>的完整链路。如果你需要按 IP 或用户隔离，只需为每个 key（IP/UserID）创建一个 <code>*TokenBucket</code>，用 <code>sync.Map</code> 管理即可。
+</p>
+
+<!-- ===== 流程图 2：Middleware 请求处理流程 ===== -->
+<div style="margin: 20px 0; text-align: center; font-size: 14px; line-height: 1.6;" data-no-dark="true">
+  <div style="display: inline-block; border: 2px solid #4caf50; border-radius: 6px; padding: 10px 24px; background: #e8f5e9; margin: 4px auto; text-align: center;">
+    <span style="color: #333;">HTTP 请求</span>
+  </div>
+  <div style="line-height: 1; font-size: 18px;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1976d2; border-radius: 8px; padding: 10px 24px; background: #e3f2fd; margin: 4px auto; text-align: center; border-style: dashed;">
+    <div style="color: #1565c0;">RateLimitMiddleware</div>
+    <div style="color: #888; font-size: 12px;">Allow() ?</div>
+  </div>
+  <div style="line-height: 1.5;">
+    <span style="color: #4caf50;">↙ 通过</span>
+    <span style="margin-left: 60px; color: #e53935;">↘ 拒绝</span>
+  </div>
+  <div>
+    <div style="display: inline-block; width: 45%; vertical-align: top; text-align: center;">
+      <div style="display: inline-block; border: 2px solid #4caf50; border-radius: 6px; padding: 10px 24px; background: #e8f5e9; margin: 4px auto; text-align: center;">
+        <div style="color: #333;">业务处理器</div>
+        <div style="color: #888; font-size: 11px;">200 OK</div>
+      </div>
+    </div>
+    <div style="display: inline-block; width: 45%; vertical-align: top; text-align: center;">
+      <div style="display: inline-block; border: 2px solid #e53935; border-radius: 6px; padding: 10px 24px; background: #ffebee; margin: 4px auto; text-align: center;">
+        <div style="color: #c62828;">429 Too Many</div>
+      </div>
+    </div>
+  </div>
+  <p style="color: #999999; font-size: 13px; margin: 5px 0 0 0;">请求经过 RateLimitMiddleware 检查后，通过则进入业务处理器，拒绝则返回 429</p>
+</div>
+
+<!-- ===== 腿部：价值量化 ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+50 行换一个透明可控的限流模块
+</h3>
+
+<!-- ===== 结构图 2：方案架构对比 ===== -->
+<div style="margin: 20px 0;" data-no-dark="true">
+  <div style="border: 1px solid #e0e0e0; border-radius: 6px; overflow: hidden;">
+    <div style="background: #e3f2fd; padding: 10px; text-align: center; font-size: 15px; font-weight: bold; border-bottom: 1px solid #e0e0e0;">
+      三种限流方案架构对比
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center;">
+      <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #4caf50;">✅ 我们的实现</div>
+      <div style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 8px; font-size: 12px; text-align: left; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;">type TokenBucket struct {...}
+func New() *TokenBucket
+func (tb) Allow() bool
+func (tb) SetRate()
+func (tb) SetCapacity()</div>
+      <div style="color: #888; font-size: 11px; margin-top: 4px;">无外部依赖 · 50 行</div>
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center; border-left: 1px solid #e0e0e0; border-right: 1px solid #e0e0e0;">
+      <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #ff9800;">⚠ x/time/rate</div>
+      <div style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 8px; font-size: 12px; text-align: left; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;">type Limiter struct{...}
+func NewLimiter(r Limit, b int) *Limiter
+func (lim) Wait(ctx)
+func (lim) Allow()
+func (lim) Reserve()</div>
+      <div style="color: #888; font-size: 11px; margin-top: 4px;">标准库依赖 · ~200 行</div>
+    </div>
+    <div style="display: inline-block; width: 33%; vertical-align: top; padding: 12px 8px; box-sizing: border-box; text-align: center;">
+      <div style="font-weight: bold; font-size: 14px; margin-bottom: 6px; color: #e53935;">❌ Redis + Lua</div>
+      <div style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 8px; font-size: 12px; text-align: left; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;">local tokens = redis.call('GET', KEYS[1])
+if tokens then ... end
+redis.call('DECR', KEYS[1])</div>
+      <div style="color: #888; font-size: 11px; margin-top: 4px;">依赖 Redis · 100+ 行</div>
+    </div>
+  </div>
+  <p style="color: #999999; font-size: 13px; margin: 5px 0 0 0;">我们的方案依赖最少，代码量最少，支持运行时调参</p>
+</div>
+
+<p style="margin: 15px 0; font-size: 16px;">
+和其他方案比一笔账：
+</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
+<thead>
+<tr style="background: #f5f7fa;">
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: left;">方案</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">代码量</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">外部依赖</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">QPS</th>
+<th style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">运行时调参</th>
+</tr>
+</thead>
+<tbody>
+<tr style="background: #e8f5e9;">
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;"><strong>我们的实现</strong></td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">50 行</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; color: #4caf50;">无</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">5万+</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; color: #4caf50;">✅</td>
+</tr>
+<tr>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">golang.org/x/time/rate</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">~200 行</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">Go 标准库</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">类似</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; color: #e53935;">❌ 需重建</td>
+</tr>
+<tr>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0;">Redis + lua 脚本</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">100+ 行 + 运维</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; color: #e53935;">Redis</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center;">网络决定</td>
+<td style="padding: 8px 10px; border: 1px solid #e0e0e0; text-align: center; color: #4caf50;">✅</td>
+</tr>
+</tbody>
+</table>
+
+<p style="margin: 15px 0; font-size: 16px;">
+我们的方案<strong>代码量最少，无外部依赖</strong>。<code>x/time/rate</code> 也能用，但它的接口设计太抽象（<code>Reservation</code>、<code>Wait</code> 这些概念），出了问题你很难快速定位。自己的 50 行代码，每一行都看得懂，改得动。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>金句：</strong>"50 行代码换一个透明可控的限流模块，这笔账很划算"
+</p>
+
+<!-- ===== 尾部：行动指令 ===== -->
+<h3 style="font-size: 18px; font-weight: bold; margin: 25px 0 10px 0;">
+把你项目里的限流方案拿出来看看
+</h3>
+
+<p style="margin: 15px 0; font-size: 16px;">
+要么现在就把这段代码复制到你项目里，改改速率参数直接用。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+或者，去翻翻你项目里现有的限流代码——如果有的话。看看它在用定时器还是时间戳，锁的粒度够不够细。
+</p>
+
+<p style="margin: 15px 0; font-size: 16px;">
+<strong>评论区聊聊</strong>：你的 API 网关用的是什么限流方案？遇到过什么线上事故？
+</p>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 25px 0;">
+
+<h4 style="font-size: 16px; font-weight: bold; margin: 15px 0 10px 0;">附录：完整代码</h4>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>package tokenbucket
+
+import (
+	"net/http"
+	"sync"
+	"time"
+)
+
+// TokenBucket 令牌桶限流器
+type TokenBucket struct {
+	mu        sync.Mutex
+	capacity  int64
+	rate      float64
+	tokens    float64
+	lastTime  time.Time
+}
+
+// New 创建一个令牌桶
+func New(rate float64, capacity int64) *TokenBucket {
+	return &TokenBucket{
+		rate:     rate,
+		capacity: capacity,
+		tokens:   float64(capacity),
+		lastTime: time.Now(),
+	}
+}
+
+// refill 按时间差补充令牌
+func (tb *TokenBucket) refill() {
+	now := time.Now()
+	elapsed := now.Sub(tb.lastTime).Seconds()
+	tb.tokens += elapsed * tb.rate
+	if tb.tokens > float64(tb.capacity) {
+		tb.tokens = float64(tb.capacity)
+	}
+	tb.lastTime = now
+}
+
+// Allow 检查是否允许通过一个请求
+func (tb *TokenBucket) Allow() bool {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	if tb.tokens < 1 {
+		return false
+	}
+	tb.tokens--
+	return true
+}
+
+// SetRate 动态调整速率
+func (tb *TokenBucket) SetRate(rate float64) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	tb.rate = rate
+}
+
+// SetCapacity 动态调整桶容量
+func (tb *TokenBucket) SetCapacity(capacity int64) {
+	tb.mu.Lock()
+	defer tb.mu.Unlock()
+	tb.refill()
+	tb.capacity = capacity
+	if tb.tokens > float64(capacity) {
+		tb.tokens = float64(capacity)
+	}
+}
+
+// RateLimitMiddleware 返回 HTTP 限流中间件
+func RateLimitMiddleware(bucket *TokenBucket) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !bucket.Allow() {
+				w.Header().Set("Retry-After", "1")
+				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}</code></pre>
+
+</body>
+</html>

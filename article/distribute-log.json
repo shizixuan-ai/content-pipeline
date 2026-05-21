@@ -1,0 +1,11 @@
+{
+  "article_md5": "dc7d786310041084a05ffa4050f5c87a",
+  "distributed_at": "2026-05-20T16:10:00+08:00",
+  "platforms": {
+    "juejin": {
+      "status": "SUCCESS",
+      "url": "https://juejin.cn/post/7641794682348421139",
+      "health_check": "200 OK"
+    }
+  }
+}
