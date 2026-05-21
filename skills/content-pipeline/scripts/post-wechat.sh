@@ -1,7 +1,7 @@
 #!/bin/bash
 # post-wechat.sh — 发布文章到微信公众号（草稿箱）
 #
-# 流程: 获取 access_token → 上传封面图 → 处理正文图片 → 创建草稿
+# 流程: 获取 access_token → 获取封面 → 处理正文图片 → 创建草稿
 # 微信仅支持写入草稿箱，需登录 mp.weixin.qq.com 手动群发。
 #
 # 用法: post-wechat.sh <title> <content_file> [cover_image]
@@ -43,152 +43,17 @@ ACCESS_TOKEN=$(bash "${SCRIPT_DIR}/auth-wechat.sh" --quiet 2>/dev/null) || {
     exit 1
 }
 
-# ─── 获取封面图 media_id（订阅号 API 要求 thumb_media_id）──────
-# 封面图通过 add_material 上传获取 media_id
-get_cover_media_id() {
-    local image_path="$1"
-    local resp
-    resp=$(curl -s -X POST "https://api.weixin.qq.com/cgi-bin/material/add_material?type=image&access_token=${ACCESS_TOKEN}" \
-        -F "media=@${image_path}" --max-time 60 2>/dev/null) || return 1
-    local mid
-    mid=$(echo "$resp" | python3 -c "import sys,json; print(json.load(sys.stdin).get('media_id',''))" 2>/dev/null)
-    [ -n "$mid" ] && echo "$mid" && return 0
-    return 1
+# ─── 获取封面图 media_id ─────────────────────────────────────
+log_info "获取封面图..."
+COVER_MEDIA_ID=$(bash "${SCRIPT_DIR}/make-cover.sh" "$TITLE" "$CONTENT_FILE" "$ACCESS_TOKEN" "$COVER_IMAGE") || {
+    log_error "微信草稿需要封面图（thumb_media_id 为必填字段）"
+    log_error "可通过以下方式提供："
+    log_error "  1. 作为第三个参数传入本地图片路径"
+    log_error "  2. 在文章 HTML 中包含一张图片"
+    log_error "  3. 设置 UNSPLASH_ACCESS_KEY 环境变量启用自动搜索"
+    exit 1
 }
-
-# search_cover_by_title — 根据文章标题自动搜索封面图
-# 优先级: Unsplash API → 生成占位图
-search_cover_by_title() {
-    local title="$1"
-    local tmp_cover
-
-    # 提取关键词（取标题前 10 个字作为搜索词）
-    local keywords
-    keywords=$(echo "$title" | python3 -c "
-import sys, re
-t = sys.stdin.read().strip()
-t = re.sub(r'[：:：\"\'\-“”]', ' ', t)[:15]
-print(t.strip() or 'cover')
-" 2>/dev/null)
-
-    # 尝试 Unsplash（需 UNSPLASH_ACCESS_KEY 环境变量）
-    if [ -n "${UNSPLASH_ACCESS_KEY:-}" ]; then
-        log_info "搜索 Unsplash: $keywords"
-        local unsplash_resp
-        unsplash_resp=$(curl -s -L \
-            "https://api.unsplash.com/search/photos?query=${keywords}&per_page=1&orientation=landscape" \
-            -H "Authorization: Client-ID ${UNSPLASH_ACCESS_KEY}" \
-            --max-time 15 2>/dev/null) || { log_warn "Unsplash 请求失败"; unsplash_resp=""; }
-
-        if [ -n "$unsplash_resp" ]; then
-            local img_url
-            img_url=$(echo "$unsplash_resp" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    urls = data.get('results', [])
-    if urls:
-        print(urls[0]['urls']['regular'])
-except: pass
-" 2>/dev/null)
-
-            if [ -n "$img_url" ]; then
-                tmp_cover=$(mktemp /tmp/wechat-cover-XXXXXX.jpg)
-                if curl -s -L --max-time 15 -o "$tmp_cover" "$img_url" 2>/dev/null; then
-                    local mid
-                    mid=$(get_cover_media_id "$tmp_cover") && { rm -f "$tmp_cover"; echo "$mid"; return 0; }
-                fi
-                rm -f "$tmp_cover"
-            fi
-        fi
-    fi
-
-    # 兜底：生成纯色占位封面
-    log_info "生成占位封面图..."
-    tmp_cover=$(mktemp /tmp/wechat-cover-XXXXXX.png)
-    python3 -c "
-import struct, zlib
-
-def create_png(width, height, r, g, b):
-    def chunk(ctype, data):
-        c = ctype + data
-        crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-        return struct.pack('>I', len(data)) + c + crc
-    sig = b'\\x89PNG\\r\\n\\x1a\\n'
-    ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
-    raw = b''
-    for y in range(height):
-        raw += b'\\x00'
-        for x in range(width):
-            raw += bytes([r, g, b])
-    idat = chunk(b'IDAT', zlib.compress(raw))
-    iend = chunk(b'IEND', b'')
-    return sig + ihdr + idat + iend
-
-with open('${tmp_cover}', 'wb') as f:
-    f.write(create_png(1200, 630, 7, 193, 96))
-" 2>/dev/null || { rm -f "$tmp_cover"; return 1; }
-
-    local mid
-    mid=$(get_cover_media_id "$tmp_cover") || { rm -f "$tmp_cover"; return 1; }
-    rm -f "$tmp_cover"
-    echo "$mid"
-    return 0
-}
-
-COVER_MEDIA_ID=""
-if [ -n "$COVER_IMAGE" ] && [ -f "$COVER_IMAGE" ]; then
-    log_info "上传封面图..."
-    COVER_MEDIA_ID=$(get_cover_media_id "$COVER_IMAGE") || {
-        log_error "封面图上传失败: $COVER_IMAGE"
-        exit 1
-    }
-    log_info "封面图上传成功"
-fi
-
-# 如果未提供封面图，尝试从正文中提取第一张图片作为封面
-if [ -z "$COVER_MEDIA_ID" ]; then
-    CONTENT_RAW=$(cat "$CONTENT_FILE")
-    FIRST_IMG=$(echo "$CONTENT_RAW" | python3 -c "
-import sys, re
-html = sys.stdin.read()
-m = re.search(r'<img[^>]+src=[\"\\']([^\"\\']+)[\"\\']', html)
-if m:
-    src = m.group(1)
-    if not src.startswith('data:'):
-        print(src)
-" 2>/dev/null)
-
-    if [ -n "$FIRST_IMG" ]; then
-        log_info "使用正文第一张图片作为封面..."
-        local_path="$FIRST_IMG"
-        is_temp=false
-        if echo "$FIRST_IMG" | grep -q '^https\?://'; then
-            tmpf=$(mktemp /tmp/wechat-cover-XXXXXX)
-            if curl -s -L --max-time 15 -o "$tmpf" "$FIRST_IMG" 2>/dev/null; then
-                local_path="$tmpf"
-                is_temp=true
-            fi
-        fi
-        if [ -f "$local_path" ]; then
-            COVER_MEDIA_ID=$(get_cover_media_id "$local_path") || true
-            $is_temp && rm -f "$local_path"
-        fi
-    fi
-fi
-
-# 仍然没有封面图 → 尝试根据标题自动搜索
-if [ -z "$COVER_MEDIA_ID" ]; then
-    log_info "未找到封面图，尝试根据标题自动搜索..."
-    COVER_MEDIA_ID=$(search_cover_by_title "$TITLE") || {
-        log_error "微信草稿需要封面图（thumb_media_id 为必填字段）"
-        log_error "可通过以下方式提供："
-        log_error "  1. 作为第三个参数传入本地图片路径"
-        log_error "  2. 在文章 HTML 中包含一张图片"
-        log_error "  3. 设置 UNSPLASH_ACCESS_KEY 环境变量启用自动搜索"
-        exit 1
-    }
-fi
+log_info "封面图就绪"
 
 # ─── 处理正文图片 ───────────────────────────────────────────
 # 微信图片策略为 must-upload，需将 HTML 中所有外链图片上传到微信素材库
@@ -206,7 +71,6 @@ matches = img_pattern.findall(html)
 
 replacements = {}
 for src in matches:
-    # 跳过 data:URI 和已处理的微信链接
     if src.startswith('data:'):
         print(f'[WARN] 跳过 data:URI 图片，请替换为真实图片链接', file=sys.stderr)
         continue
@@ -265,7 +129,6 @@ CONTENT_FOR_DRAFT=$(echo "$PROCESSED_CONTENT" | python3 -c "
 import sys, re
 html = sys.stdin.read()
 title = re.escape(sys.argv[1])
-# 移除带注释包装的标题（如 <!-- ===== 头部：标题 ===== --> <h2>...</h2>）
 html = re.sub(
     r'<!--\\s*={3,}\\s*.*?\\s*={3,}\\s*-->\\s*'
     r'<h[12][^>]*>\\s*' + title + r'\\s*</h[12]>\\s*',
@@ -273,7 +136,6 @@ html = re.sub(
     html,
     count=1
 )
-# 也移除裸标题（无注释包装，仅第一次出现）
 html = re.sub(
     r'<h[12][^>]*>\\s*' + title + r'\\s*</h[12]>\\s*',
     '',

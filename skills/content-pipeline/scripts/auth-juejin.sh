@@ -3,16 +3,15 @@
 #
 # 策略（按优先级）:
 #   1. JUEJIN_COOKIE 环境变量 → 验证有效性
-#   2. agent-browser session → 提取并验证（自动续期）
-#   3. 都无效 → 引导用户运行 login-juejin.sh
+#   2. agent-browser session → 提取并验证
+#   3. 都无效 → 引导用户扫码登录
 #
-# 使用 eval 方式可在当前 shell 设置 JUEJIN_COOKIE:
-#   eval "$(auth-juejin.sh)"
-#   或
-#   JUEJIN_COOKIE=$(auth-juejin.sh --quiet) post-juejin.sh ...
+# 使用方法:
+#   eval "$(auth-juejin.sh)"          # 设置 JUEJIN_COOKIE 到当前 shell
+#   JUEJIN_COOKIE=$(auth-juejin.sh --quiet) post-juejin.sh ...  # 子进程模式
 #
 # Exit codes:
-#   0 — 认证成功，Cookie 有效
+#   0 — 认证成功
 #   1 — 认证失败（所有方式均无效）
 
 set -euo pipefail
@@ -22,94 +21,100 @@ source "$SCRIPT_DIR/utils.sh"
 
 MODE="${1:-}"
 
-# ─── 验证 Cookie 的函数 ──────────────────────────────────────
-validate_and_export() {
-    local cookie="$1"
-    local src="$2"
+# ─── 内部: 从 agent-browser session 提取 Cookie ─────────────────
+# 成功时 stdout 输出 Cookie header，退出码 0
+# 失败时无输出，退出码 1
+_agent_browser_juejin_cookie() {
+    local session_name="juejin"
 
-    local RESPONSE
-    RESPONSE=$(curl -s \
+    AGENT_BROWSER_SESSION_NAME="$session_name" \
+        agent-browser open https://juejin.cn >/dev/null 2>&1 || return 1
+
+    sleep 2
+
+    local cookie_json
+    cookie_json=$(AGENT_BROWSER_SESSION_NAME="$session_name" \
+        agent-browser cookies get --json 2>/dev/null || echo "")
+
+    AGENT_BROWSER_SESSION_NAME="$session_name" agent-browser close >/dev/null 2>&1 || true
+
+    [ -z "$cookie_json" ] && return 1
+
+    echo "$cookie_json" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    cookies = data.get('data', {}).get('cookies', [])
+    if not cookies:
+        sys.exit(1)
+    pairs = sorted([c['name'] + '=' + c['value'] for c in cookies])
+    print('; '.join(pairs))
+except Exception:
+    sys.exit(1)
+" 2>/dev/null || return 1
+}
+
+# ─── 内部: 验证 Cookie 有效性 ──────────────────────────────────
+# 通过掘金 API 检查 err_no 是否为 0
+_validate_juejin_cookie() {
+    local cookie="$1"
+    local response err_no
+
+    response=$(curl -s \
         -H "Cookie: ${cookie}" \
         -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" \
         -H "Referer: https://juejin.cn/" \
         --max-time 10 \
         "https://api.juejin.cn/user_api/v1/user/get" 2>/dev/null) || return 1
 
-    # 检查 err_no，只有 0 才是真正登录
-    local ERR_NO
-    ERR_NO=$(echo "$RESPONSE" | python3 -c "
+    err_no=$(echo "$response" | python3 -c "
 import sys, json
 try:
-    data = json.load(sys.stdin)
-    print(data.get('err_no', -1))
+    print(json.load(sys.stdin).get('err_no', -1))
 except Exception:
     print(-1)
 " 2>/dev/null) || return 1
 
-    if [ "$ERR_NO" = "0" ]; then
-        log_info "Cookie 有效（来源: ${src}）"
-        if [ "$MODE" = "--quiet" ]; then
-            echo "$cookie"
-        else
-            echo "export JUEJIN_COOKIE='$cookie'"
-        fi
-        return 0
+    [ "$err_no" = "0" ]
+}
+
+# ─── 内部: 输出 Cookie（按 MODE 格式）───────────────────────────
+_output_cookie() {
+    local cookie="$1"
+    if [ "$MODE" = "--quiet" ]; then
+        echo "$cookie"
     else
-        return 1
+        echo "export JUEJIN_COOKIE='$cookie'"
     fi
 }
 
-# ─── 策略 1: 环境变量 ─────────────────────────────────────────
+# ─── 策略 1: JUEJIN_COOKIE 环境变量 ─────────────────────────────
 COOKIE="${JUEJIN_COOKIE:-}"
 if [ -n "$COOKIE" ]; then
-    if validate_and_export "$COOKIE" "JUEJIN_COOKIE 环境变量"; then
+    if _validate_juejin_cookie "$COOKIE"; then
+        log_info "Cookie 有效（来源: JUEJIN_COOKIE 环境变量）"
+        _output_cookie "$COOKIE"
         exit 0
     fi
     log_warn "JUEJIN_COOKIE 已过期，尝试 agent-browser session..."
-else
-    log_info "JUEJIN_COOKIE 未设置，尝试 agent-browser session..."
 fi
 
-# ─── 策略 2: agent-browser session ────────────────────────────
+# ─── 策略 2: agent-browser session ──────────────────────────────
 if command -v agent-browser &>/dev/null; then
-    log_info "启动 agent-browser 恢复 session..."
+    log_info "从 agent-browser session 提取 Cookie..."
 
-    AGENT_BROWSER_SESSION_NAME="juejin" \
-        agent-browser open https://juejin.cn >/dev/null 2>&1 || {
-        log_warn "无法启动 agent-browser"
-        log_info "请安装 agent-browser: npm i -g agent-browser && agent-browser install"
-        exit 1
-    }
-    sleep 2
+    AGENT_COOKIE=$(_agent_browser_juejin_cookie) || AGENT_COOKIE=""
 
-    COOKIE_JSON=$(AGENT_BROWSER_SESSION_NAME="juejin" \
-        agent-browser cookies get --json 2>/dev/null || echo "")
-
-    AGENT_BROWSER_SESSION_NAME="juejin" agent-browser close >/dev/null 2>&1 || true
-
-    if [ -n "$COOKIE_JSON" ]; then
-        COOKIE=$(echo "$COOKIE_JSON" | python3 -c "
-import sys, json
-try:
-    data = json.load(sys.stdin)
-    cookies = data.get('data', {}).get('cookies', [])
-    pairs = sorted([c['name'] + '=' + c['value'] for c in cookies])
-    print('; '.join(pairs))
-except Exception:
-    sys.exit(1)
-" 2>/dev/null) || COOKIE=""
-
-        if [ -n "$COOKIE" ] && validate_and_export "$COOKIE" "agent-browser session"; then
-            exit 0
-        fi
+    if [ -n "$AGENT_COOKIE" ] && _validate_juejin_cookie "$AGENT_COOKIE"; then
+        log_info "Cookie 有效（来源: agent-browser session）"
+        _output_cookie "$AGENT_COOKIE"
+        exit 0
     fi
 
-    log_warn "agent-browser session 中的 Cookie 已过期"
-else
-    log_info "agent-browser 未安装，无法自动获取 Cookie"
+    log_warn "agent-browser session 中的 Cookie 无效或已过期"
 fi
 
-# ─── 全部无效 ─────────────────────────────────────────────────
+# ─── 全部无效 ────────────────────────────────────────────────────
 log_error "未找到有效的掘金 Cookie"
 echo "" >&2
 echo "有两种方式解决：" >&2

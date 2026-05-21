@@ -135,7 +135,7 @@ skills/content-pipeline/
 ├── scripts/                      # 工具脚本
 │   ├── auth-juejin.sh
 │   ├── post-juejin.sh
-│   ├── upload-image.sh
+│   ├── upload-wechat-image.sh
 │   ├── health-check.sh
 │   └── utils.sh
 └── templates/                    # 文章模板

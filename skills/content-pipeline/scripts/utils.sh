@@ -40,12 +40,3 @@ md5_of() {
         md5 -r "$1" | cut -d' ' -f1
     fi
 }
-
-# 请求 URL 健康检查
-# 用法: health_check "url"
-health_check() {
-    local url="$1"
-    local http_code
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --head -L "$url" 2>/dev/null)
-    echo "$http_code"
-}

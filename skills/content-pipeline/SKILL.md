@@ -109,11 +109,13 @@ platforms/
 
 ```
 scripts/
-├── auth-juejin.sh       # 掘金认证
-├── post-juejin.sh       # 掘金文章发布
-├── upload-image.sh      # 通用图片上传
-├── health-check.sh      # 二次探活
-└── utils.sh             # 通用函数
+├── distribute.sh          # 多平台分发编排引擎
+├── auth-juejin.sh         # 掘金认证（内置 agent-browser session 管理）
+├── post-juejin.sh         # 掘金文章发布
+├── make-cover.sh          # 微信封面图生成
+├── upload-wechat-image.sh # 微信图片上传
+├── health-check.sh        # 二次探活
+└── utils.sh               # 通用函数
 ```
 
 ## 文章类型

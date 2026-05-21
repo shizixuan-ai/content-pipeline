@@ -29,7 +29,7 @@
 **检查逻辑**（按平台）：
 - 环境变量已设置 → 标记为 `[就绪]`
 - 环境变量未设置 → 依次尝试以下方式：
-  1. **agent-browser session**（仅掘金）— 运行 `check-juejin-cookie.sh` 自动检测持久化 session
+  1. **agent-browser session**（仅掘金）— 运行 `auth-juejin.sh` 自动检测持久化 session
   2. **交互式输入** — 询问用户粘贴凭据值
   3. **登录引导** — 若 agent-browser 可用，提示运行 `login-juejin.sh` 扫码登录
 - 用户选择 skip → 该平台从分发列表中移除
@@ -42,7 +42,7 @@ npm i -g agent-browser && agent-browser install
 login-juejin.sh    # 打开浏览器扫码，自动持久化 session
 
 # 后续 pipeline 自动处理
-# auth-juejin.sh 和 check-juejin-cookie.sh 会自动从 session 提取 Cookie
+# auth-juejin.sh 会自动从 session 提取 Cookie
 # 过期时 pipeline 会引导用户重新扫码
 ```
 
