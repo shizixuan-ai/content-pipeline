@@ -145,21 +145,7 @@ html = re.sub(
 print(html, end='')
 " "$TITLE" 2>/dev/null) || CONTENT_FOR_DRAFT="$PROCESSED_CONTENT"
 
-DRAFT_DATA=$(python3 -c "
-import sys, json
-
-article = {
-    'title': sys.argv[1],
-    'content': sys.argv[2],
-    'need_open_comment': 0,
-    'only_fans_can_comment': 0,
-}
-cover = sys.argv[3]
-if cover:
-    article['thumb_media_id'] = cover
-
-print(json.dumps({'articles': [article]}, ensure_ascii=False))
-" "$TITLE" "$CONTENT_FOR_DRAFT" "$COVER_MEDIA_ID" 2>/dev/null)
+DRAFT_DATA=$(echo "$CONTENT_FOR_DRAFT" | python3 "${SCRIPT_DIR}/lib/pipeline.py" build-wechat-draft --title "$TITLE" --content-file - --cover-media-id "$COVER_MEDIA_ID" 2>/dev/null)
 
 RESPONSE=$(curl -s -w "\n%{http_code}" \
     -X POST "https://api.weixin.qq.com/cgi-bin/draft/add?access_token=${ACCESS_TOKEN}" \

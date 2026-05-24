@@ -1,0 +1,202 @@
+<section style="margin: 0; padding: 0; font-size: 15px; line-height: 1.75; color: #333333; font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', 'Microsoft YaHei', sans-serif;">
+
+<h1 style="font-size: 22px; font-weight: bold; text-align: center; margin: 30px 0 10px; color: #1a1a1a; line-height: 1.4;">聚焦内容，剩下的交给 Pipeline</h1>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">周末下午的真实场景</h2>
+
+<p style="margin: 10px 0;">周六下午，你花了 2 小时写完一篇技术文章。满意。然后噩梦开始了。</p>
+
+<p style="margin: 10px 0;">打开掘金 — 粘贴、调格式、传封面图。打开知乎 — 标题得改，语气得调。打开公众号 — HTML 排版全崩了。打开简书、CSDN、头条...</p>
+
+<p style="margin: 10px 0;"><strong style="font-weight: bold;">1.5 小时后</strong>，你终于发完了 6 个平台。脖子酸，眼睛干，写了一下午，<strong style="font-weight: bold;">真正花在创作上的时间只有一半</strong>。</p>
+
+<!-- 图片占位：手工分发 vs pipeline 耗时对比 -->
+<div style="background: #f5f7fa; border: 1px dashed #dddddd; border-radius: 8px; padding: 30px 15px; text-align: center; color: #999999; font-size: 14px; margin: 15px 0;" data-no-dark="true">建议作者在此处插入：对比图——让读者直观看到手工分发耗费大量时间</div>
+
+<p style="margin: 10px 0;">这不是你的问题。<strong style="font-weight: bold;">工具的问题。</strong></p>
+
+<p style="margin: 10px 0;">写作是创作，分发是搬砖。工具应该解决搬砖，不是让你天天搬。</p>
+
+<blockquote style="margin: 15px 0; padding: 12px 15px; background: #f0f6ff; border-left: 4px solid #1e80ff; color: #333333;">
+<p style="margin: 0; font-size: 15px;"><strong style="font-weight: bold;">金句：</strong>写作是创作，分发是搬砖 — 工具应该解决搬砖</p>
+</blockquote>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">content-pipeline 是什么</h2>
+
+<p style="margin: 10px 0;">一句话：<strong style="font-weight: bold;">一次写作，按平台改写，API 一键分发。</strong></p>
+
+<p style="margin: 10px 0;">它是一个开源的内容管线工具。你的全部写作流程 — 从定题、写大纲、出初稿、审查修改、排版美化，到最终分发到 6 个平台 — <strong style="font-weight: bold;">全部在这一个管线里完成</strong>。</p>
+
+<!-- image: flowchart | pipeline 七阶段流程 -->
+<div style="margin: 20px 0; text-align: center; font-size: 14px; line-height: 1.6; background: #fafbfc; padding: 20px 10px; border-radius: 6px; border: 1px solid #e8e8e8;" data-no-dark="true">
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Drafting</div>
+  <div style="line-height: 1.2; font-size: 18px; color: #666; margin: 2px 0;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Outlining</div>
+  <div style="line-height: 1.2; font-size: 18px; color: #666; margin: 2px 0;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Writing</div>
+  <div style="line-height: 1.2; font-size: 18px; color: #666; margin: 2px 0;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Reviewing</div>
+  <div style="line-height: 1.2; font-size: 18px; color: #666; margin: 2px 0;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Polishing</div>
+  <div style="line-height: 1.2; font-size: 18px; color: #666; margin: 2px 0;">↓</div>
+  <div style="display: inline-block; border: 2px solid #1e80ff; border-radius: 6px; padding: 10px 24px; background: #e8f0fe; margin: 4px auto; text-align: center; font-weight: bold; color: #1a1a1a;">Distributing</div>
+</div>
+
+<p style="margin: 10px 0;">不只是"发文章"这么简单。每个阶段都隔离成独立角色：</p>
+
+<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
+  <thead>
+    <tr style="background: #f5f7fa;">
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">阶段</th>
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">角色</th>
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">产出</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Drafting</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">需求分析师</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">文章要点 brief.md</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Outlining</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">内容架构师</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">有条理的大纲 outline.md</td></tr>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Writing</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">技术写作专家</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">完整初稿 draft.md</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Reviewing</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">毒舌主编</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">审查报告</td></tr>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Polishing</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">排版师</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">WeChat 兼容 HTML</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Distributing</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">分发工程师</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">6 平台一键投递</td></tr>
+  </tbody>
+</table>
+
+<p style="margin: 10px 0;">每个阶段完成后，你看一眼，点头，再进下一个。<strong style="font-weight: bold;">中断了也不怕</strong> — 下次进来直接从断点续。</p>
+
+<blockquote style="margin: 15px 0; padding: 12px 15px; background: #f0f6ff; border-left: 4px solid #1e80ff; color: #333333;">
+<p style="margin: 0; font-size: 15px;"><strong style="font-weight: bold;">金句：</strong>聚焦内容，剩下的交给 pipeline</p>
+</blockquote>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">核心能力拆解</h2>
+
+<h3 style="font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: #1a1a1a;">能力 1：平台人格化改写</h3>
+
+<p style="margin: 10px 0;">每个平台的读者不一样。你在掘金讲技术深度，在知乎需要论点论据，在简书得讲故事。</p>
+
+<p style="margin: 10px 0;">content-pipeline 为每个平台配了一份 <strong style="font-weight: bold;">Persona 档案</strong>：</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code># platforms/zhihu.md
+audience: 大学生、高知群体
+mindset: 喜欢看"为什么"
+pain: 缺乏论据的观点、无数据支持的断言
+taboo:
+  - 泛泛而谈
+  - 无数据支持的结论</code></pre>
+
+<p style="margin: 10px 0;">分发时，管线按 Persona <strong style="font-weight: bold;">自动改写语气和结构</strong>。掘金版保留完整代码，简书版把代码打成故事片段，知乎版加上对比表格和前沿数据引用。</p>
+
+<p style="margin: 10px 0;">不需要你自己记 — 每个平台要什么风格，<strong style="font-weight: bold;">管线替你记住了</strong>。</p>
+
+<!-- 图片占位：同一篇文章在 6 平台的不同呈现 -->
+<div style="background: #f5f7fa; border: 1px dashed #dddddd; border-radius: 8px; padding: 30px 15px; text-align: center; color: #999999; font-size: 14px; margin: 15px 0;" data-no-dark="true">建议作者在此处插入：对比图——展示人格化改写的效果</div>
+
+<h3 style="font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: #1a1a1a;">能力 2：格式智能降级</h3>
+
+<p style="margin: 10px 0;">不是所有平台都支持 Mermaid 图和数学公式。知乎支持 <code style="background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: Consolas, 'Courier New', monospace;">$$</code>，简书不支持。</p>
+
+<p style="margin: 10px 0;">管线读每个平台的 <code style="background: #f0f0f0; padding: 2px 5px; border-radius: 3px; font-family: Consolas, 'Courier New', monospace;">Format Capabilities</code> 配置，<strong style="font-weight: bold;">自动降级不支持的格式</strong>：</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>markdown_features:
+  mermaid: false     # → 降级为截图
+  math: false        # → 降级为文字描述
+  footnotes: false   # → 降级为行内注释</code></pre>
+
+<p style="margin: 10px 0;">你只管写。兼容的事交给 pipeline。</p>
+
+<h3 style="font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: #1a1a1a;">能力 3：一键分发 + 幂等保护</h3>
+
+<p style="margin: 10px 0;">这是最直接的爽点。</p>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code>./scripts/distribute.sh ./article juejin zhihu csdn jianshu</code></pre>
+
+<p style="margin: 10px 0;"><strong style="font-weight: bold;">一条命令，5 分钟，6 个平台全部发完。</strong></p>
+
+<!-- 图片占位：终端录屏 demo GIF -->
+<div style="background: #f5f7fa; border: 1px dashed #dddddd; border-radius: 8px; padding: 30px 15px; text-align: center; color: #999999; font-size: 14px; margin: 15px 0;" data-no-dark="true">建议作者在此处插入：终端录屏 GIF——展示命令行分发全过程</div>
+
+<p style="margin: 10px 0;">底层做了三件事：</p>
+<ol style="margin: 10px 0; padding-left: 20px;">
+  <li style="margin: 5px 0;"><strong style="font-weight: bold;">认证链</strong> — Cookie / OAuth2 / Playwright 三种模式，每个平台自动认证</li>
+  <li style="margin: 5px 0;"><strong style="font-weight: bold;">失败隔离</strong> — 知乎挂了，不影响掘金和 CSDN 正常发布</li>
+  <li style="margin: 5px 0;"><strong style="font-weight: bold;">幂等保护</strong> — 已分发的文章 MD5 校验，重跑会警告你，不会重复发</li>
+</ol>
+
+<blockquote style="margin: 15px 0; padding: 12px 15px; background: #f0f6ff; border-left: 4px solid #1e80ff; color: #333333;">
+<p style="margin: 0; font-size: 15px;"><strong style="font-weight: bold;">金句：</strong>6 个平台，5 分钟，一条命令</p>
+</blockquote>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">对比：手工分发 vs Pipeline</h2>
+
+<table style="width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 14px;">
+  <thead>
+    <tr style="background: #f5f7fa;">
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">维度</th>
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">手工分发</th>
+      <th style="border: 1px solid #e0e0e0; padding: 8px 10px; text-align: left; font-weight: bold;">content-pipeline</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">平台覆盖</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">逐个手动粘贴</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">6 平台一键投递</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">人格化改写</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">自己记、自己改</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">按 Persona 自动改写</td></tr>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">防重复发布</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">无</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">MD5 校验 + 分发日志</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">发布验证</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">发完不管</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">HTTP 探活自动确认</td></tr>
+    <tr><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">容错</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">卡住全停</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">单平台失败不影响其他</td></tr>
+    <tr style="background: #fafbfc;"><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">认证方式</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">手动复制 Cookie</td><td style="border: 1px solid #e0e0e0; padding: 8px 10px;">Cookie + OAuth2 + Playwright</td></tr>
+  </tbody>
+</table>
+
+<blockquote style="margin: 15px 0; padding: 12px 15px; background: #f0f6ff; border-left: 4px solid #1e80ff; color: #333333;">
+<p style="margin: 0; font-size: 15px;"><strong style="font-weight: bold;">金句：</strong>不是工具不够多，是没有专门为内容管线设计的工具</p>
+</blockquote>
+
+<!-- 图片占位：对比表可视化 -->
+<div style="background: #f5f7fa; border: 1px dashed #dddddd; border-radius: 8px; padding: 30px 15px; text-align: center; color: #999999; font-size: 14px; margin: 15px 0;" data-no-dark="true">建议作者在此处插入：对比图——突出 pipeline 在各维度的优势</div>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">效果：省了多少</h2>
+
+<p style="margin: 10px 0;"><strong style="font-weight: bold;">手工分发 6 个平台：约 1.5 小时。用 pipeline：约 5 分钟。</strong></p>
+
+<p style="margin: 10px 0;">省了 <strong style="font-weight: bold;">95% 的时间</strong>。一个月发 4 篇，一个月省 6 小时。一年省出 <strong style="font-weight: bold;">3 个工作日</strong>。</p>
+
+<p style="margin: 10px 0;">这些时间你本来可以用于：写更好的文章、读更多的文档、陪家人。或者，就发个呆也挺好。</p>
+
+<h3 style="font-size: 16px; font-weight: bold; margin: 20px 0 10px; color: #1a1a1a;">上手三步</h3>
+
+<pre style="background: #f5f7fa; border: 1px solid #e0e0e0; padding: 12px; font-size: 13px; line-height: 1.6; margin: 15px 0; white-space: pre-wrap !important; font-family: Consolas, 'Courier New', monospace;"><code># 第一步：克隆项目
+git clone && npm install
+
+# 第二步：配置认证
+./scripts/login-juejin.sh    # 扫码一次，永久有效
+export CSDN_COOKIE="..."     # 或从浏览器复制
+
+# 第三步：写作 + 分发
+./scripts/distribute.sh ./article juejin zhihu csdn jianshu</code></pre>
+
+<p style="margin: 10px 0;"><strong style="font-weight: bold;">一次配置之后，第二条、第三条文章就只是「写」和「发」两步了。</strong></p>
+
+<blockquote style="margin: 15px 0; padding: 12px 15px; background: #f0f6ff; border-left: 4px solid #1e80ff; color: #333333;">
+<p style="margin: 0; font-size: 15px;"><strong style="font-weight: bold;">金句：</strong>写作是创作，分发是搬砖 — 工具应该解决搬砖</p>
+</blockquote>
+
+<hr style="border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;" />
+
+<h2 style="font-size: 18px; font-weight: bold; margin: 25px 0 12px; color: #1a1a1a;">开源在 GitHub</h2>
+
+<p style="margin: 10px 0;">项目地址：<a href="https://github.com/your/content-pipeline" style="color: #1e80ff; text-decoration: none;">github.com/your/content-pipeline</a></p>
+
+<p style="margin: 10px 0;">如果这个工具帮到了你，或者你觉得某个地方还能更好 — 提个 issue 聊两句。</p>
+
+<p style="margin: 15px 0; text-align: center; padding: 15px; background: #f5f7fa; border-radius: 6px;"><strong style="font-weight: bold;">你最头疼哪个平台的分发？评论区见 — 你的平台可能是下一个被加进来的。</strong></p>
+
+</section>

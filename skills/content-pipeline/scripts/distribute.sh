@@ -11,6 +11,8 @@
 # 环境变量（平台特定）:
 #   JUEJIN_CATEGORY_ID  — 掘金分类 ID（默认 6809637769959178254=后端）
 #   JUEJIN_TAG_IDS      — 掘金标签 ID，逗号分隔
+#   TOUTIAO_ACCOUNT     — 头条号账号名（默认 default）
+#   TOUTIAO_HEADLESS    — 头条浏览器模式（默认 true，无头运行）
 #
 # Exit codes:
 #   0 — 全部分发成功
@@ -32,7 +34,7 @@ LOG_FILE="${ARTICLE_ROOT}/distribute-log.json"
 COVER_IMAGE="${ARTICLE_ROOT}/cover.png"
 
 if [ ${#PLATFORMS[@]} -eq 0 ]; then
-    log_error "请指定至少一个平台: juejin wechat toutiao zhihu"
+    log_error "请指定至少一个平台: juejin wechat toutiao zhihu csdn jianshu"
     exit 1
 fi
 
@@ -77,11 +79,13 @@ except Exception:
 " "$LOG_FILE" 2>/dev/null || echo "unknown")
 
             log_warn "检测到文章已在 ${PREV_TIME} 分发过（MD5 一致）"
-            log_warn "重新分发将覆盖已有分发记录。继续？(y/N)"
-            read -r confirm </dev/tty || confirm="n"
-            if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
-                log_info "已取消分发"
-                exit 0
+            if [ "${DISTRIBUTE_FORCE:-}" != "1" ]; then
+                log_warn "重新分发将覆盖已有分发记录。继续？(y/N)"
+                read -r confirm </dev/tty || confirm="n"
+                if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
+                    log_info "已取消分发"
+                    exit 0
+                fi
             fi
         fi
     fi
@@ -100,12 +104,7 @@ for PLATFORM in "${PLATFORMS[@]}"; do
 
     if [ ! -f "$POST_SCRIPT" ]; then
         log_warn "未找到投递脚本: ${POST_SCRIPT}，跳过"
-        RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'SKIP', 'message': 'post script not found'}
-print(json.dumps(r))
-")
+        RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status SKIP --message "post script not found")
         continue
     fi
 
@@ -114,12 +113,7 @@ print(json.dumps(r))
         log_info "认证 ${PLATFORM}..."
         ACCESS_RESULT=$(bash "$AUTH_SCRIPT" --quiet 2>/dev/null) || {
             log_warn "${PLATFORM} 认证失败，跳过"
-            RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'FAIL', 'message': 'auth failed'}
-print(json.dumps(r))
-")
+            RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "auth failed")
             continue
         }
         # 认证成功，某些脚本需在环境变量中设置凭据
@@ -128,6 +122,9 @@ print(json.dumps(r))
         fi
         if [ "$PLATFORM" = "wechat" ]; then
             export WECHAT_ACCESS_TOKEN="$ACCESS_RESULT"
+        fi
+        if [ "$PLATFORM" = "zhihu" ]; then
+            export ZHIHU_COOKIE="$ACCESS_RESULT"
         fi
     fi
 
@@ -143,7 +140,25 @@ print(json.dumps(r))
             CONTENT_FILE="${ARTICLE_ROOT}/distribute/${PLATFORM}/article.md"
             [ ! -f "$CONTENT_FILE" ] && CONTENT_FILE="$DRAFT_MD"
             CATEGORY_ID="${JUEJIN_CATEGORY_ID:-6809637769959178254}"
-            TAG_IDS="${JUEJIN_TAG_IDS:-}"
+            TAG_IDS="${JUEJIN_TAG_IDS:-6809640407484334093}"
+            ;;
+        toutiao)
+            CONTENT_FILE="${ARTICLE_ROOT}/distribute/${PLATFORM}/article.md"
+            [ ! -f "$CONTENT_FILE" ] && CONTENT_FILE="$DRAFT_MD"
+            COVER="${COVER_IMAGE}"
+            [ ! -f "$COVER" ] && COVER=""
+            ;;
+        csdn)
+            CONTENT_FILE="${ARTICLE_ROOT}/distribute/${PLATFORM}/article.md"
+            [ ! -f "$CONTENT_FILE" ] && CONTENT_FILE="$DRAFT_MD"
+            ;;
+        zhihu)
+            CONTENT_FILE="${ARTICLE_ROOT}/distribute/${PLATFORM}/article.md"
+            [ ! -f "$CONTENT_FILE" ] && CONTENT_FILE="$DRAFT_MD"
+            ;;
+        jianshu)
+            CONTENT_FILE="${ARTICLE_ROOT}/distribute/${PLATFORM}/article.md"
+            [ ! -f "$CONTENT_FILE" ] && CONTENT_FILE="$DRAFT_MD"
             ;;
         *)
             CONTENT_FILE="$DRAFT_MD"
@@ -152,12 +167,7 @@ print(json.dumps(r))
 
     if [ ! -f "$CONTENT_FILE" ]; then
         log_warn "未找到内容文件: ${CONTENT_FILE}，跳过 ${PLATFORM}"
-        RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'SKIP', 'message': 'content file not found'}
-print(json.dumps(r))
-")
+        RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status SKIP --message "content file not found")
         continue
     fi
 
@@ -169,12 +179,7 @@ print(json.dumps(r))
             POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" "$COVER" 2>/dev/null) || {
                 exit_code=$?
                 log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
-                RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'FAIL', 'message': 'post failed with exit ${exit_code}'}
-print(json.dumps(r))
-")
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
                 continue
             }
             MEDIA_ID=$(echo "$POST_OUTPUT" | grep "media_id:" | head -1 | awk '{print $2}')
@@ -188,25 +193,56 @@ print(json.dumps(r))
             POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" "$CATEGORY_ID" "$TAG_IDS" 2>/dev/null) || {
                 exit_code=$?
                 log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
-                RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'FAIL', 'message': 'post failed with exit ${exit_code}'}
-print(json.dumps(r))
-")
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
                 continue
             }
             RESULT_URL=$(echo "$POST_OUTPUT" | tail -1)
             log_info "掘金发布成功: ${RESULT_URL}"
             ;;
+        toutiao)
+            POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" "$COVER" 2>/dev/null) || {
+                exit_code=$?
+                log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
+                continue
+            }
+            RESULT_URL=$(echo "$POST_OUTPUT" | grep "^url:" | head -1 | awk '{print $2}')
+            log_info "头条发布成功: ${RESULT_URL}"
+            ;;
+        csdn)
+            POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" \
+                "${CSDN_TAGS:-后端}" "" "${CSDN_READ_TYPE:-public}" "${CSDN_CONTENT_TYPE:-original}" 2>/dev/null) || {
+                exit_code=$?
+                log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
+                continue
+            }
+            RESULT_URL=$(echo "$POST_OUTPUT" | tail -1)
+            log_info "CSDN 发布成功: ${RESULT_URL}"
+            ;;
+        zhihu)
+            POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" 2>/dev/null) || {
+                exit_code=$?
+                log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
+                continue
+            }
+            RESULT_URL=$(echo "$POST_OUTPUT" | tail -1)
+            log_info "知乎发布成功: ${RESULT_URL}"
+            ;;
+        jianshu)
+            POST_OUTPUT=$(bash "$POST_SCRIPT" "$TITLE" "$CONTENT_FILE" 2>/dev/null) || {
+                exit_code=$?
+                log_warn "${PLATFORM} 投递失败 (exit: ${exit_code})"
+                RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status FAIL --message "post failed with exit ${exit_code}")
+                continue
+            }
+            RESULT_URL=$(echo "$POST_OUTPUT" | tail -1)
+            log_info "简书发布成功: ${RESULT_URL}"
+            ;;
         *)
             log_warn "不支持的平台: ${PLATFORM}"
-            RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {'status': 'SKIP', 'message': 'unsupported platform'}
-print(json.dumps(r))
-")
+            RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status SKIP --message "unsupported platform")
             continue
             ;;
     esac
@@ -225,16 +261,7 @@ print(json.dumps(r))
     fi
 
     # --- 记录结果 ---
-    RESULTS=$(echo "$RESULTS" | python3 -c "
-import sys, json
-r = json.load(sys.stdin)
-r['${PLATFORM}'] = {
-    'status': 'SUCCESS',
-    'url': '${RESULT_URL:-}',
-    'health_check': '${HEALTH_MSG:-skip}',
-}
-print(json.dumps(r, ensure_ascii=False))
-")
+    RESULTS=$(echo "$RESULTS" | "${SCRIPT_DIR}/lib/pipeline.py" record-result --platform "$PLATFORM" --status SUCCESS --url "${RESULT_URL:-}" --health-check "${HEALTH_MSG:-skip}")
 done
 
 # ─── 写分发日志 ─────────────────────────────────────────────

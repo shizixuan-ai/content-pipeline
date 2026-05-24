@@ -52,3 +52,27 @@ MOCK
     [ "$status" -eq 0 ]
     echo "$output" | grep -q "全部分发成功"
 }
+
+make_toutiao_ops_mock() {
+    local mock="${BATS_TEST_TMPDIR}/toutiao-ops"
+    cat > "$mock" <<'MOCK'
+#!/bin/bash
+case "$1" in
+    auth) exit 0 ;;
+    publish)
+        echo '{"success":true,"url":"https://mp.toutiao.com/article/123"}'
+        exit 0
+        ;;
+    *) exit 1 ;;
+esac
+MOCK
+    chmod +x "$mock"
+}
+
+@test "distribute: 头条分发成功" {
+    make_toutiao_ops_mock
+    export PATH="${BATS_TEST_TMPDIR}:$PATH"
+    run "${BATS_TEST_DIRNAME}/../distribute.sh" "$TEST_DIR" "toutiao"
+    [ "$status" -eq 0 ]
+    echo "$output" | grep -q "全部分发成功"
+}
