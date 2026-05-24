@@ -1,0 +1,40 @@
+#!/bin/bash
+# login-zhihu.sh — 扫码登录知乎并持久化 Playwright session
+#
+# 使用 Playwright 的 launchPersistentContext() 保存 Chromium profile，
+# 后续 auth-zhihu.sh 可在 headless 模式直接提取 cookie，无需重复登录。
+#
+# 前置条件: @openclaw-cn/toutiao-ops 已安装 (npm i -g @openclaw-cn/toutiao-ops)
+#
+# 用法:
+#   login-zhihu.sh
+#
+# Exit codes:
+#   0 — 登录成功
+#   1 — toutiao-ops 未安装
+#   2 — 登录超时/失败
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/utils.sh"
+
+if ! command -v toutiao-ops &>/dev/null; then
+    log_error "toutiao-ops 未安装。请运行: npm install -g @openclaw-cn/toutiao-ops"
+    exit 1
+fi
+
+log_info "打开知乎登录页面。请扫码登录..."
+
+node "$SCRIPT_DIR/lib/zhihu-session.cjs" login 2>&1 || {
+    exit_code=$?
+    if [ "$exit_code" -eq 2 ]; then
+        log_error "登录超时，请重试"
+    else
+        log_error "登录失败 (exit: ${exit_code})"
+    fi
+    exit "$exit_code"
+}
+
+log_info "登录成功，session 已持久化到 ~/.zhihu/browser-data/"
+exit 0
