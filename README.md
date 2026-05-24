@@ -30,9 +30,10 @@
 - **格式降级** — 检测并降级平台不支持的格式（Mermaid、脚注、表格等）
 - **插图自动生成** — Writing 阶段标记，Polishing 阶段自动生成 SVG/HTML 卡片
 - **黑话修正双重防线** — Writing 预防 + Reviewing 检测，内置 27 组词库
-- **API 直连投递** — 纯 API 驱动，拒绝浏览器模拟，降低风控风险
+- **多策略认证** — 环境变量 / Playwright session / Chrome CDP，自动降级
 - **二次探活** — 分发后验证已发布 URL 可访问性
 - **中断恢复** — 会话意外中断后自动检测断点继续
+- **MD5 幂等** — 同一篇文章重复运行自动检测，不重复分发
 
 ---
 
@@ -93,12 +94,14 @@ drafting → outlining → writing → reviewing → polishing → finalized →
 
 ## 支持的分发平台
 
-| 平台 | 内容格式 | 认证方式 | 图片策略 |
-|------|---------|---------|---------|
-| 稀土掘金 | Markdown | X-Token | 外链 |
-| 微信公众号 | 内联 HTML | appid + secret | 上传微信素材库 |
-| 今日头条 | 富文本 JSON | OAuth ClientKey | 外链 |
-| 知乎 | Markdown | Token | 外链 |
+| 平台 | 内容格式 | 认证方式 | 投递方式 | 图片策略 |
+|------|---------|---------|---------|---------|
+| 稀土掘金 | Markdown | Playwright session → Cookie | curl API | 外链 |
+| 微信公众号 | 内联 HTML | appid + secret → access_token | curl API | 上传微信素材库 |
+| 今日头条 | 富文本 JSON | OAuth ClientKey | toutiao-ops CLI | 外链 |
+| 知乎 | RichText | Chrome CDP session → Cookie | CDP 浏览器操控 | 外链 |
+| CSDN | Markdown | Playwright session → Cookie | curl API（HMAC 签名）| 外链 |
+| 简书 | Markdown | Playwright session → Cookie | curl API（4 步流程）| 外链 |
 
 ---
 
@@ -106,10 +109,50 @@ drafting → outlining → writing → reviewing → polishing → finalized →
 
 每个平台配置了独立的读者画像，分发前 AI 自动改写内容：
 
-- **掘金**：技术直白风，保留代码，开门见山
-- **微信**：深度洞察风，加入个人观点和踩坑记录
-- **头条**：故事化风，第一人称，低信息密度
-- **知乎**：论证拆解风，多维对比，数据支撑
+- **掘金**：技术直白风，保留代码，开门见山。标题格式"技术栈 + 场景 + 结果"
+- **微信**：深度洞察风，加入个人观点和踩坑记录，内容许可独立成文或二次创作
+- **头条**：故事化风，第一人称，低信息密度，代码隐藏
+- **知乎**：论证拆解风，多维对比，数据支撑，长文推理
+- **CSDN**：专业分享风，偏实操，代码完整可复制
+- **简书**：故事观点风，轻量阅读，避免密集代码
+
+---
+
+## 认证方式
+
+分发引擎支持三种认证策略，按优先级自动降级：
+
+```
+auth-*.sh 统一逻辑:
+  1. 环境变量（JUEJIN_COOKIE / WECHAT_APPID 等） → 验证
+  2. Playwright persistent session（~/.juejin/browser-data/） → 提取 cookie → 验证
+  3. 引导扫码登录（login-*.sh）
+```
+
+| 平台 | Session 存储 | 认证有效期 |
+|------|-------------|-----------|
+| 掘金 | `~/.juejin/browser-data/` | session 续期至 1 年 |
+| 微信 | 无（每次通过 appid+secret 获取） | 2 小时 |
+| 知乎 | `~/.zhihu/browser-data/` | 约 7 天 |
+| CSDN | `~/.csdn/browser-data/` | 约 7 天 |
+| 简书 | `~/.jianshu/browser-data/` | 约 7 天 |
+| 头条 | OAuth token（环境变量） | 随 token |
+
+---
+
+## 分发流程
+
+```
+distribute.sh 对每个平台独立执行:
+  1. 幂等检查   — draft.md MD5 比对 distribute-log.json
+  2. 认证       — auth-*.sh，3 种策略自动降级
+  3. 内容选择   — 先查 distribute/<platform>/ 定制版，fallback 到 draft
+  4. 投递       — post-*.sh，API 或 CDP 浏览器操作
+  5. 探活       — health-check.sh，HEAD 请求验证
+  6. 写日志     — distribute-log.json
+```
+
+单平台失败不影响其他平台。
 
 ---
 
@@ -118,8 +161,8 @@ drafting → outlining → writing → reviewing → polishing → finalized →
 ```
 skills/content-pipeline/
 ├── SKILL.md                      # 编排引擎
-├── CHECKLIST.md                  # 审核标准
-├── blacklist-words.md            # 黑话词库
+├── CHECKLIST.md                  # 审核标准（5 维度）
+├── blacklist-words.md            # 黑话词库（27 组）
 ├── prompts/                      # 7 阶段 Prompt
 │   ├── 01-drafting.md
 │   ├── 02-outlining.md
@@ -128,20 +171,47 @@ skills/content-pipeline/
 │   ├── 05-polishing.md
 │   └── 06-distributing.md
 ├── platforms/                    # 平台配置
-│   ├── juejin.md
-│   ├── wechat.md
-│   ├── toutiao.md
-│   └── zhihu.md
-├── scripts/                      # 工具脚本
-│   ├── auth-juejin.sh
-│   ├── post-juejin.sh
-│   ├── upload-wechat-image.sh
-│   ├── health-check.sh
-│   └── utils.sh
-└── templates/                    # 文章模板
-    ├── tutorial-rocket-model.md
-    ├── opinion-rocket-model.md
-    └── product-rocket-model.md
+│   ├── juejin.md / wechat.md / toutiao.md
+│   └── zhihu.md / csdn.md / jianshu.md
+├── templates/                    # 文章模板
+│   ├── tutorial-rocket-model.md
+│   ├── opinion-rocket-model.md
+│   └── product-rocket-model.md
+└── scripts/                      # 分发执行引擎
+    ├── distribute.sh             # 编排引擎
+    ├── auth-*.sh (×6)            # 按平台认证
+    ├── post-*.sh (×6)            # 按平台投递
+    ├── login-*.sh (×4)           # 扫码登录引导
+    ├── lib/
+    │   ├── pipeline.py           # Python CLI 工具
+    │   ├── juejin-session.cjs    # Playwright session
+    │   ├── zhihu-session.cjs     # Chrome CDP session
+    │   ├── csdn-session.cjs      # Playwright session
+    │   └── jianshu-session.cjs   # Playwright session
+    ├── health-check.sh           # 二次探活
+    ├── make-cover.sh             # 微信封面图
+    ├── upload-wechat-image.sh    # 微信图片上传
+    └── utils.sh                  # 日志 + 指数退避重试
+```
+
+---
+
+## 文章产物
+
+```
+article/
+├── .phase                    # 当前阶段
+├── brief.md                  # 需求要点
+├── outline.md                # 文章大纲
+├── draft.md                  # Markdown 终稿
+├── draft.html                # HTML 终稿（微信兼容）
+├── review-report.md          # 审查报告
+├── cover.png                 # 封面图
+├── distribute/               # 平台分发产物
+│   ├── juejin/article.md
+│   ├── wechat/article.html
+│   └── toutiao/article.json
+└── distribute-log.json       # 分发历史（MD5 幂等）
 ```
 
 ---
